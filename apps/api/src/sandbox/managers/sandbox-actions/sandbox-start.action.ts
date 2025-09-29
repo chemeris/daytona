@@ -103,7 +103,7 @@ export class SandboxStartAction extends SandboxAction {
     let runnerId: string
     try {
       const runner = await this.runnerService.getRandomAvailableRunner({
-        region: sandbox.regionId,
+        regionId: sandbox.regionId,
         sandboxClass: sandbox.class,
         snapshotRef: sandbox.buildInfo.snapshotRef,
       })
@@ -137,7 +137,7 @@ export class SandboxStartAction extends SandboxAction {
 
     // Try to assign a new available runner
     const runner = await this.runnerService.getRandomAvailableRunner({
-      region: sandbox.regionId,
+      regionId: sandbox.regionId,
       sandboxClass: sandbox.class,
       excludedRunnerIds: excludedRunnerIds,
     })
@@ -254,7 +254,7 @@ export class SandboxStartAction extends SandboxAction {
       if (sandbox.backupState === BackupState.COMPLETED) {
         if (runner.availabilityScore < this.configService.getOrThrow('runnerUsage.availabilityScoreThreshold')) {
           const availableRunners = await this.runnerService.findAvailableRunners({
-            region: sandbox.regionId,
+            regionId: sandbox.regionId,
             sandboxClass: sandbox.class,
           })
           const lessUsedRunners = availableRunners.filter((runner) => runner.id !== originalRunnerId)
@@ -298,6 +298,115 @@ export class SandboxStartAction extends SandboxAction {
       if (syncCheck !== null) {
         return syncCheck
       }
+
+      const registry = await this.dockerRegistryService.findOne(sandbox.backupRegistryId)
+      if (!registry) {
+        throw new Error('No registry found for backup')
+      }
+
+      const existingBackups = sandbox.existingBackupSnapshots
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .map((existingSnapshot) => existingSnapshot.snapshotName)
+
+      let validBackup: string | null = null
+      let exists = false
+
+      while (existingBackups.length > 0) {
+        try {
+          if (!validBackup) {
+            //  last snapshot is the current snapshot, so we don't need to check it
+            //  just in case, we'll use the value from the backupSnapshot property
+            validBackup = sandbox.backupSnapshot
+            existingBackups.pop()
+          } else {
+            validBackup = existingBackups.pop()
+          }
+          if (await this.dockerProvider.checkImageExistsInRegistry(validBackup, registry)) {
+            exists = true
+            break
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to check if backup snapshot ${sandbox.backupSnapshot} exists in registry ${registry.id}:`,
+            error,
+          )
+        }
+      }
+
+      if (!exists) {
+        await this.updateSandboxState(sandbox.id, SandboxState.ERROR, undefined, 'No valid backup snapshot found')
+        return SYNC_AGAIN
+      }
+
+      //  make sure we pick a runner that has the base snapshot
+      let baseSnapshot: Snapshot | null = null
+      if (sandbox.snapshot) {
+        try {
+          baseSnapshot = await this.snapshotService.getSnapshotByName(sandbox.snapshot, sandbox.organizationId)
+        } catch (e) {
+          if (e instanceof NotFoundException) {
+            //  if the base snapshot is not found, we'll use any available runner later
+          } else {
+            //  for all other errors, throw them
+            throw e
+          }
+        }
+      }
+
+      const snapshotRef = baseSnapshot ? baseSnapshot.internalName : null
+
+      let availableRunners: Runner[] = []
+
+      const runnersWithBaseSnapshot: Runner[] = snapshotRef
+        ? await this.runnerService.findAvailableRunners({
+            regionId: sandbox.regionId,
+            sandboxClass: sandbox.class,
+            snapshotRef,
+          })
+        : []
+      if (runnersWithBaseSnapshot.length > 0) {
+        availableRunners = runnersWithBaseSnapshot
+      } else {
+        //  if no runner has the base snapshot, get all available runners
+        availableRunners = await this.runnerService.findAvailableRunners({
+          regionId: sandbox.regionId,
+          sandboxClass: sandbox.class,
+        })
+      }
+
+      //  check if we have any available runners after filtering
+      if (availableRunners.length === 0) {
+        // Sync state again later. Runners are unavailable
+        return DONT_SYNC_AGAIN
+      }
+
+      //  get random runner from available runners
+      const randomRunnerIndex = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min)
+      const runner = availableRunners[randomRunnerIndex(0, availableRunners.length - 1)]
+
+      //  verify the runner is still available and ready
+      if (!runner || runner.state !== RunnerState.READY || runner.unschedulable) {
+        this.logger.warn(`Selected runner ${runner.id} is no longer available, retrying sandbox assignment`)
+        return SYNC_AGAIN
+      }
+
+      const runnerAdapter = await this.runnerAdapterFactory.create(runner)
+
+      await this.updateSandboxState(sandbox.id, SandboxState.RESTORING, runner.id)
+
+      sandbox.snapshot = validBackup
+
+      let metadata: { [key: string]: string } | undefined = undefined
+      if (organization) {
+        metadata = {
+          limitNetworkEgress: String(organization.sandboxLimitedNetworkEgress),
+          organizationId: organization.id,
+          organizationName: organization.name,
+          sandboxName: sandbox.name,
+        }
+      }
+
+      await runnerAdapter.createSandbox(sandbox, registry, undefined, metadata)
     } else {
       // if sandbox has runner, start sandbox
       const runner = await this.runnerService.findOne(sandbox.runnerId)
@@ -644,7 +753,7 @@ export class SandboxStartAction extends SandboxAction {
 
     const runnersWithBaseSnapshot: Runner[] = snapshotRef
       ? await this.runnerService.findAvailableRunners({
-          region: sandbox.regionId,
+          regionId: sandbox.regionId,
           sandboxClass: sandbox.class,
           snapshotRef,
           excludedRunnerIds: [excludedRunnerId],
@@ -655,7 +764,7 @@ export class SandboxStartAction extends SandboxAction {
     } else {
       //  if no runner has the base snapshot, get all available runners
       availableRunners = await this.runnerService.findAvailableRunners({
-        region: sandbox.regionId,
+        regionId: sandbox.regionId,
         sandboxClass: sandbox.class,
         excludedRunnerIds: [excludedRunnerId],
       })
