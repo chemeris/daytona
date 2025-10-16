@@ -1409,7 +1409,7 @@ export class SandboxService extends LockableEntity {
 
     return result.map((row) => row.region)
   }
-  
+
   async snapshotSandbox(sandboxId: string): Promise<string> {
     const sandbox = await this.sandboxRepository.findOne({
       where: { id: sandboxId },
