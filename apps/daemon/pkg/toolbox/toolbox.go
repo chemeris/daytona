@@ -99,7 +99,6 @@ func (s *server) Start() error {
 	r.Use(gin.Recovery())
 	r.Use(func(ctx *gin.Context) {
 		if s.telemetry.TracerProvider == nil {
-			log.Warn("Telemetry not initialized. Proceeding without telemetry...")
 			ctx.Next()
 			return
 		}

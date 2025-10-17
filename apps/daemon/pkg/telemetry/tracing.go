@@ -11,14 +11,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	log "github.com/sirupsen/logrus"
 )
 
 // InitTracer initializes OpenTelemetry with Jaeger exporter
-func InitTracer(ctx context.Context, config Config) (*sdktrace.TracerProvider, error) {
+func InitTracer(ctx context.Context, config Config) (*trace.TracerProvider, error) {
 	// Create a new resource with service information
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -39,9 +39,9 @@ func InitTracer(ctx context.Context, config Config) (*sdktrace.TracerProvider, e
 	}
 
 	// Create TracerProvider
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(exporter),
+		trace.WithResource(res),
 	)
 
 	// Set global TracerProvider
@@ -51,7 +51,7 @@ func InitTracer(ctx context.Context, config Config) (*sdktrace.TracerProvider, e
 }
 
 // ShutdownTracer gracefully shuts down the tracer provider
-func ShutdownTracer(tp *sdktrace.TracerProvider) {
+func ShutdownTracer(tp *trace.TracerProvider) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
