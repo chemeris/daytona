@@ -17,6 +17,7 @@ import {
 } from './../../docker-registry/providers/docker-registry.provider.interface'
 import { RegistryType } from './../../docker-registry/enums/registry-type.enum'
 import { OrganizationService } from '../../organization/services/organization.service'
+import { Organization } from '../../organization/entities/organization.entity'
 
 @Injectable()
 @ApiOAuth2(['openid', 'profile', 'email'])
@@ -122,19 +123,19 @@ export class DockerRegistryService {
   }
 
   /**
-   * If `organizationId` is not provided, the default *shared* snapshot registry is returned (if exists).
+   * If `organizationIdOrEntity` is not provided, the default *shared* snapshot registry is returned (if exists).
    *
-   * If `organizationId` is provided and shared infrastructure is blocked for the organization, the default snapshot registry for the organization is returned (if exists).
+   * If `organizationIdOrEntity` is provided and shared infrastructure is blocked for the organization, the default snapshot registry for the organization is returned (if exists).
    *
    * If shared infrastructure is not blocked for the organization, the default *shared* snapshot registry is returned (if exists) as a fallback if no organization snapshot registry exists.
    */
-  async getDefaultSnapshotRegistry(organizationId?: string): Promise<DockerRegistry | null> {
+  async getDefaultSnapshotRegistry(organizationIdOrEntity?: string | Organization): Promise<DockerRegistry | null> {
     const baseFindOptions: FindOptionsWhere<DockerRegistry> = {
       isDefault: true,
       registryType: RegistryType.SNAPSHOT,
     }
 
-    if (!organizationId) {
+    if (!organizationIdOrEntity) {
       // Return the default shared registry (if exists)
       return this.dockerRegistryRepository.findOne({
         where: {
@@ -144,7 +145,14 @@ export class DockerRegistryService {
       })
     }
 
-    const organization = await this.organizationService.findOne(organizationId)
+    const organizationId =
+      typeof organizationIdOrEntity === 'string' ? organizationIdOrEntity : organizationIdOrEntity.id
+
+    const organization =
+      typeof organizationIdOrEntity === 'string'
+        ? await this.organizationService.findOne(organizationIdOrEntity)
+        : organizationIdOrEntity
+
     if (!organization) {
       throw new NotFoundException('Organization not found')
     }
