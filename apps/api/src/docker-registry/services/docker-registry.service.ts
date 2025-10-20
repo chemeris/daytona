@@ -303,6 +303,15 @@ export class DockerRegistryService {
   }
 
   async getRegistryPushAccess(organizationId: string, userId: string): Promise<RegistryPushAccessDto> {
+    const organization = await this.organizationService.findOne(organizationId)
+    if (!organization) {
+      throw new NotFoundException('Organization not found')
+    }
+
+    if (organization.blockSharedInfrastructure) {
+      throw new ForbiddenException('Using a shared transient registry is not allowed for this organization')
+    }
+
     const transientRegistry = await this.getDefaultTransientRegistry()
     if (!transientRegistry) {
       throw new Error('No default transient registry configured')
