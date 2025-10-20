@@ -74,7 +74,7 @@ export class RunnerController {
         regionId: createRunnerDto.regionId,
         version: '0',
       },
-      authContext.organizationId,
+      authContext.organization,
     )
     return RunnerDto.fromRunner(runner)
   }

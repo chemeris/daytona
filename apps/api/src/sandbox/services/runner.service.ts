@@ -26,6 +26,7 @@ import { RedisLockProvider } from '../common/redis-lock.provider'
 import { TypedConfigService } from '../../config/typed-config.service'
 import { LogExecution } from '../../common/decorators/log-execution.decorator'
 import { Region } from '../entities/region.entity'
+import { Organization } from '../../organization/entities/organization.entity'
 
 @Injectable()
 export class RunnerService {
@@ -47,7 +48,7 @@ export class RunnerService {
     private readonly regionRepository: Repository<Region>,
   ) {}
 
-  async create(createRunnerDto: CreateRunnerInternalDto, organizationId?: string): Promise<Runner> {
+  async create(createRunnerDto: CreateRunnerInternalDto, organization?: Organization): Promise<Runner> {
     if (!this.isValidClass(createRunnerDto.class)) {
       throw new Error('Invalid class')
     }
@@ -55,7 +56,7 @@ export class RunnerService {
     const region = await this.regionRepository.findOne({
       where: {
         id: createRunnerDto.regionId,
-        organizationId,
+        organizationId: organization.id,
       },
     })
 
