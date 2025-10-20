@@ -9,7 +9,7 @@ from typing import Awaitable, Callable, Dict, List, Optional
 from daytona_api_client_async import PaginatedSandboxes as PaginatedSandboxesDto
 from daytona_api_client_async import PortPreviewUrl
 from daytona_api_client_async import Sandbox as SandboxDto
-from daytona_api_client_async import SandboxApi, SshAccessDto, SshAccessValidationDto, SandboxState
+from daytona_api_client_async import SandboxApi, SandboxState, SshAccessDto, SshAccessValidationDto
 from daytona_toolbox_api_client_async import (
     ApiClient,
     ComputerUseApi,

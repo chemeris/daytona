@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional
 from daytona_api_client import PaginatedSandboxes as PaginatedSandboxesDto
 from daytona_api_client import PortPreviewUrl
 from daytona_api_client import Sandbox as SandboxDto
-from daytona_api_client import SandboxApi, SshAccessDto, SshAccessValidationDto, SandboxState
+from daytona_api_client import SandboxApi, SandboxState, SshAccessDto, SshAccessValidationDto
 from daytona_toolbox_api_client import ApiClient, ComputerUseApi, FileSystemApi, GitApi, InfoApi, LspApi, ProcessApi
 from deprecated import deprecated
 from pydantic import ConfigDict, PrivateAttr
