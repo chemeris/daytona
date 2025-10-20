@@ -294,7 +294,10 @@ export class BackupManager implements TrackableJobExecutions, OnApplicationShutd
     }
 
     // Get available backup registry
-    const registry = await this.dockerRegistryService.getAvailableBackupRegistry(sandbox.regionId)
+    const registry = await this.dockerRegistryService.getAvailableBackupRegistry(
+      sandbox.regionId,
+      sandbox.organizationId,
+    )
     if (!registry) {
       throw new BadRequestError('No backup registry configured')
     }

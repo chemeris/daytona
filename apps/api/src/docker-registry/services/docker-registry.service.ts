@@ -180,7 +180,7 @@ export class DockerRegistryService {
     })
   }
 
-  async getAvailableBackupRegistry(preferredRegionId: string): Promise<DockerRegistry | null> {
+  async getAvailableBackupRegistry(preferredRegionId: string, organizationId?: string): Promise<DockerRegistry | null> {
     const registries = await this.dockerRegistryRepository.find({
       where: { registryType: RegistryType.BACKUP, isDefault: true },
     })
@@ -198,6 +198,16 @@ export class DockerRegistryService {
       return preferredRegionRegistries[randomIndex]
     }
 
+    const organization = await this.organizationService.findOne(organizationId)
+    if (!organization) {
+      throw new NotFoundException('Organization not found')
+    }
+
+    // Fallback registries fall under shared infrastructure
+    if (organization.blockSharedInfrastructure) {
+      return null
+    }
+
     // If no registry found in preferred region, try to find a fallback registry
     const fallbackRegistries = registries.filter((registry) => registry.isFallback === true)
 
@@ -206,8 +216,7 @@ export class DockerRegistryService {
       return fallbackRegistries[randomIndex]
     }
 
-    // If no fallback registry found either, throw an error
-    throw new Error('No backup registry available')
+    return null
   }
 
   /**
