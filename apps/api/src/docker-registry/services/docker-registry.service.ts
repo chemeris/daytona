@@ -188,40 +188,65 @@ export class DockerRegistryService {
     })
   }
 
-  async getAvailableBackupRegistry(preferredRegionId: string, organizationId?: string): Promise<DockerRegistry | null> {
-    const registries = await this.dockerRegistryRepository.find({
-      where: { registryType: RegistryType.BACKUP, isDefault: true },
+  /**
+   * Gets the default backup registry for an organization, with preference for a specific region.
+   *
+   * The selection logic follows this priority order:
+   * 1. Organization registry in the preferred region
+   * 2. Organization registry with an unset region (not reserved for a specific region)
+   * 3. Global fallback registry (if organization allows shared infrastructure)
+   */
+  async getDefaultBackupRegistry(
+    organizationIdOrEntity: string | Organization,
+    preferredRegionId: string,
+  ): Promise<DockerRegistry | null> {
+    const organizationId =
+      typeof organizationIdOrEntity === 'string' ? organizationIdOrEntity : organizationIdOrEntity.id
+
+    const baseFindOptions: FindOptionsWhere<DockerRegistry> = {
+      isDefault: true,
+      registryType: RegistryType.BACKUP,
+    }
+
+    const orgRegistries = await this.dockerRegistryRepository.find({
+      where: { ...baseFindOptions, organizationId },
     })
 
-    if (registries.length === 0) {
-      return null
+    if (orgRegistries.length > 0) {
+      const preferredRegionRegistries = orgRegistries.filter((r) => r.regionId === preferredRegionId)
+      if (preferredRegionRegistries.length > 0) {
+        const randomIndex = Math.floor(Math.random() * preferredRegionRegistries.length)
+        return preferredRegionRegistries[randomIndex]
+      }
+
+      // Fallback to organization registries with an unset region (not reserved for a specific region)
+      const fallbackOrgRegistries = orgRegistries.filter((r) => !r.regionId)
+      if (fallbackOrgRegistries.length > 0) {
+        const randomIndex = Math.floor(Math.random() * fallbackOrgRegistries.length)
+        return fallbackOrgRegistries[randomIndex]
+      }
     }
 
-    // Filter registries by preferred region
-    const preferredRegionRegistries = registries.filter((registry) => registry.regionId === preferredRegionId)
+    const organization =
+      typeof organizationIdOrEntity === 'string'
+        ? await this.organizationService.findOne(organizationIdOrEntity)
+        : organizationIdOrEntity
 
-    // If we have registries in the preferred region, randomly select one
-    if (preferredRegionRegistries.length > 0) {
-      const randomIndex = Math.floor(Math.random() * preferredRegionRegistries.length)
-      return preferredRegionRegistries[randomIndex]
-    }
-
-    const organization = await this.organizationService.findOne(organizationId)
     if (!organization) {
       throw new NotFoundException('Organization not found')
     }
 
-    // Fallback registries fall under shared infrastructure
     if (organization.blockSharedInfrastructure) {
       return null
     }
 
-    // If no registry found in preferred region, try to find a fallback registry
-    const fallbackRegistries = registries.filter((registry) => registry.isFallback === true)
+    const fallbackGlobalRegistries = await this.dockerRegistryRepository.find({
+      where: { ...baseFindOptions, organizationId: IsNull(), isFallback: true },
+    })
 
-    if (fallbackRegistries.length > 0) {
-      const randomIndex = Math.floor(Math.random() * fallbackRegistries.length)
-      return fallbackRegistries[randomIndex]
+    if (fallbackGlobalRegistries.length > 0) {
+      const randomIndex = Math.floor(Math.random() * fallbackGlobalRegistries.length)
+      return fallbackGlobalRegistries[randomIndex]
     }
 
     return null

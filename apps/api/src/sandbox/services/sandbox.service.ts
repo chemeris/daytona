@@ -3,7 +3,14 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { ForbiddenException, Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common'
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Not, Repository, LessThan, In, JsonContains, FindOptionsWhere, ILike } from 'typeorm'
 import { Sandbox } from '../entities/sandbox.entity'
@@ -66,6 +73,8 @@ import {
 import { LockableEntity } from '../../common/services/lockable-entity.service'
 import { customAlphabet as customNanoid, urlAlphabet } from 'nanoid'
 import { GlobalRegionsIds } from '../constants/global-regions.constant'
+import { DockerRegistryService } from '../../docker-registry/services/docker-registry.service'
+import { RegionService } from './region.service'
 
 const DEFAULT_CPU = 1
 const DEFAULT_MEMORY = 1
@@ -95,6 +104,8 @@ export class SandboxService extends LockableEntity {
     private readonly organizationService: OrganizationService,
     private readonly runnerAdapterFactory: RunnerAdapterFactory,
     private readonly organizationUsageService: OrganizationUsageService,
+    private readonly dockerRegistryService: DockerRegistryService,
+    private readonly regionService: RegionService,
     redisLockProvider: RedisLockProvider,
   ) {
     super(redisLockProvider)
@@ -287,7 +298,7 @@ export class SandboxService extends LockableEntity {
     let pendingDiskIncrement: number | undefined
 
     try {
-      const regionId = this.getValidatedOrDefaultRegionId(createSandboxDto.target)
+      const regionId = await this.getValidatedOrDefaultRegionId(organization, createSandboxDto.target)
       const sandboxClass = this.getValidatedOrDefaultClass(createSandboxDto.class)
 
       let snapshotIdOrName = createSandboxDto.snapshot
@@ -346,6 +357,16 @@ export class SandboxService extends LockableEntity {
         }
         if (createSandboxDto.gpu) {
           gpu = createSandboxDto.gpu
+        }
+      }
+
+      // Backup registry must be configured for non-ephemeral sandboxes
+      if (createSandboxDto.autoDeleteInterval === 0) {
+        const registry = await this.dockerRegistryService.getDefaultBackupRegistry(regionId, organization.id)
+        if (!registry) {
+          throw new BadRequestError(
+            'No backup registry is configured for this organization. Persistent sandboxes require a backup registry.',
+          )
         }
       }
 
@@ -525,7 +546,7 @@ export class SandboxService extends LockableEntity {
     let pendingDiskIncrement: number | undefined
 
     try {
-      const regionId = this.getValidatedOrDefaultRegionId(createSandboxDto.target)
+      const regionId = await this.getValidatedOrDefaultRegionId(organization, createSandboxDto.target)
       const sandboxClass = this.getValidatedOrDefaultClass(createSandboxDto.class)
 
       const cpu = createSandboxDto.cpu || DEFAULT_CPU
@@ -1080,12 +1101,36 @@ export class SandboxService extends LockableEntity {
     return sandbox
   }
 
-  private getValidatedOrDefaultRegionId(regionId?: string): string {
-    if (!regionId || regionId.trim().length === 0) {
-      return GlobalRegionsIds.US
+  private async getValidatedOrDefaultRegionId(organization: Organization, regionId?: string): Promise<string> {
+    regionId = regionId?.trim()
+
+    if (!regionId) {
+      if (!organization.blockSharedInfrastructure) {
+        return GlobalRegionsIds.US
+      }
+
+      const regions = await this.regionService.findAll(organization.id)
+      if (regions.length === 0) {
+        throw new BadRequestException('No regions found for this organization')
+      }
+      return regions[0].id
     }
 
-    return regionId.trim()
+    const isGlobalRegion = Object.values(GlobalRegionsIds).includes(regionId as any)
+
+    if (isGlobalRegion) {
+      if (organization.blockSharedInfrastructure) {
+        throw new NotFoundException('Region not found')
+      }
+      return regionId
+    }
+
+    const regionOrganizationId = await this.regionService.getOrganizationId(regionId)
+    if (regionOrganizationId !== organization.id) {
+      throw new BadRequestException('Region not found')
+    }
+
+    return regionId
   }
 
   private getValidatedOrDefaultClass(sandboxClass: SandboxClass): SandboxClass {
