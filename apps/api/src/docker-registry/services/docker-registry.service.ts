@@ -102,47 +102,36 @@ export class DockerRegistryService {
     await this.dockerRegistryRepository.remove(registry)
   }
 
-  // TODO: transactional
-  async setDefault(registryId: string): Promise<DockerRegistry> {
-    const registry = await this.dockerRegistryRepository.findOne({
-      where: { id: registryId },
-    })
-
-    if (!registry) {
-      throw new NotFoundException(`Docker registry with ID ${registryId} not found`)
-    }
-
-    await this.unsetDefaultRegistry()
-
-    registry.isDefault = true
-    return this.dockerRegistryRepository.save(registry)
-  }
-
-  private async unsetDefaultRegistry(): Promise<void> {
-    await this.dockerRegistryRepository.update({ isDefault: true }, { isDefault: false })
-  }
-
   /**
-   * If `organizationIdOrEntity` is not provided, the default *shared* snapshot registry is returned (if exists).
+   * If `organizationIdOrEntity` is not provided, an available *shared* snapshot registry is returned (if exists).
    *
-   * If `organizationIdOrEntity` is provided and shared infrastructure is blocked for the organization, the default snapshot registry for the organization is returned (if exists).
+   * If `organizationIdOrEntity` is provided and shared infrastructure is blocked for the organization, an available organization snapshot registry is returned (if exists).
    *
-   * If shared infrastructure is not blocked for the organization, the default *shared* snapshot registry is returned (if exists) as a fallback if no organization snapshot registry exists.
+   * If shared infrastructure is not blocked for the organization, an available *shared* snapshot registry is returned (if exists) as a fallback if no organization snapshot registry exists.
    */
-  async getDefaultSnapshotRegistry(organizationIdOrEntity?: string | Organization): Promise<DockerRegistry | null> {
+  async getAvailableSnapshotRegistry(organizationIdOrEntity?: string | Organization): Promise<DockerRegistry | null> {
     const baseFindOptions: FindOptionsWhere<DockerRegistry> = {
-      isDefault: true,
+      isActive: true,
       registryType: RegistryType.SNAPSHOT,
     }
 
-    if (!organizationIdOrEntity) {
-      // Return the default shared registry (if exists)
-      return this.dockerRegistryRepository.findOne({
-        where: {
-          ...baseFindOptions,
-          organizationId: IsNull(),
-        },
+    const findAvailableRegistries = (organizationId?: string) => {
+      return this.dockerRegistryRepository.find({
+        where: { ...baseFindOptions, organizationId: organizationId ?? IsNull() },
       })
+    }
+
+    const getRandomRegistry = (registries: DockerRegistry[]): DockerRegistry | null => {
+      if (registries.length > 0) {
+        const randomIndex = Math.floor(Math.random() * registries.length)
+        return registries[randomIndex]
+      }
+      return null
+    }
+
+    if (!organizationIdOrEntity) {
+      const sharedRegistries = await findAvailableRegistries()
+      return getRandomRegistry(sharedRegistries)
     }
 
     const organizationId =
@@ -157,35 +146,42 @@ export class DockerRegistryService {
       throw new NotFoundException('Organization not found')
     }
 
-    const orgRegistry = await this.dockerRegistryRepository.findOne({
-      where: {
-        ...baseFindOptions,
-        organizationId,
-      },
-    })
-
+    // Prefer organization registries
+    const orgRegistries = await findAvailableRegistries(organizationId)
+    const orgRegistry = getRandomRegistry(orgRegistries)
     if (orgRegistry) {
-      // Prefer default organization registry
       return orgRegistry
     }
 
     if (!organization.blockSharedInfrastructure) {
-      // Return the default shared registry (if exists)
-      return this.dockerRegistryRepository.findOne({
-        where: {
-          ...baseFindOptions,
-          organizationId: IsNull(),
-        },
-      })
+      const sharedRegistries = await findAvailableRegistries()
+      return getRandomRegistry(sharedRegistries)
     }
 
     return null
   }
 
-  async getDefaultTransientRegistry(): Promise<DockerRegistry | null> {
-    return this.dockerRegistryRepository.findOne({
-      where: { isDefault: true, registryType: RegistryType.TRANSIENT },
+  /**
+   * Gets an available transient registry (if exists).
+   *
+   * Note: Transient registries are considered *shared* infrastructure.
+   */
+  async getAvailableTransientRegistry(): Promise<DockerRegistry | null> {
+    const baseFindOptions: FindOptionsWhere<DockerRegistry> = {
+      isActive: true,
+      registryType: RegistryType.TRANSIENT,
+    }
+
+    const registries = await this.dockerRegistryRepository.find({
+      where: baseFindOptions,
     })
+
+    if (registries.length > 0) {
+      const randomIndex = Math.floor(Math.random() * registries.length)
+      return registries[randomIndex]
+    }
+
+    return null
   }
 
   /**
@@ -196,7 +192,7 @@ export class DockerRegistryService {
    * 2. Organization registry with an unset region (not reserved for a specific region)
    * 3. Global fallback registry (if organization allows shared infrastructure)
    */
-  async getDefaultBackupRegistry(
+  async getAvailableBackupRegistry(
     organizationIdOrEntity: string | Organization,
     preferredRegionId: string,
   ): Promise<DockerRegistry | null> {
@@ -204,7 +200,7 @@ export class DockerRegistryService {
       typeof organizationIdOrEntity === 'string' ? organizationIdOrEntity : organizationIdOrEntity.id
 
     const baseFindOptions: FindOptionsWhere<DockerRegistry> = {
-      isDefault: true,
+      isActive: true,
       registryType: RegistryType.BACKUP,
     }
 
@@ -354,7 +350,7 @@ export class DockerRegistryService {
       throw new ForbiddenException('Using a shared transient registry is not allowed for this organization')
     }
 
-    const transientRegistry = await this.getDefaultTransientRegistry()
+    const transientRegistry = await this.getAvailableTransientRegistry()
     if (!transientRegistry) {
       throw new Error('No default transient registry configured')
     }

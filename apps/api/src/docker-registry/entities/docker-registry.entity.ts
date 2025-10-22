@@ -24,7 +24,7 @@ export class DockerRegistry {
   password: string
 
   @Column({ default: false })
-  isDefault: boolean
+  isActive: boolean
 
   @Column({ default: false })
   isFallback: boolean

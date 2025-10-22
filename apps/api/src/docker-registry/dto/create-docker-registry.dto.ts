@@ -38,8 +38,8 @@ export class CreateDockerRegistryDto {
   @IsEnum(RegistryType)
   registryType: RegistryType
 
-  @ApiPropertyOptional({ description: 'Set as default registry' })
+  @ApiPropertyOptional({ description: 'Whether the registry is active is available for use' })
   @IsBoolean()
   @IsOptional()
-  isDefault?: boolean
+  isActive?: boolean
 }

@@ -362,7 +362,7 @@ export class SandboxService extends LockableEntity {
 
       // Backup registry must be configured for non-ephemeral sandboxes
       if (createSandboxDto.autoDeleteInterval === 0) {
-        const registry = await this.dockerRegistryService.getDefaultBackupRegistry(regionId, organization.id)
+        const registry = await this.dockerRegistryService.getAvailableBackupRegistry(regionId, organization.id)
         if (!registry) {
           throw new BadRequestError(
             'No backup registry is configured for this organization. Persistent sandboxes require a backup registry.',

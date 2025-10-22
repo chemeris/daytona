@@ -590,7 +590,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
       snapshot.buildRunnerId = runner.id
       await this.snapshotRepository.save(snapshot)
 
-      const registry = await this.dockerRegistryService.getDefaultSnapshotRegistry(snapshot.organizationId)
+      const registry = await this.dockerRegistryService.getAvailableSnapshotRegistry(snapshot.organizationId)
 
       const runnerAdapter = await this.runnerAdapterFactory.create(runner)
 
@@ -627,7 +627,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
     let localImageName = snapshot.imageName
 
     if (snapshot.buildInfo) {
-      registry = await this.dockerRegistryService.getDefaultSnapshotRegistry(snapshot.organizationId)
+      registry = await this.dockerRegistryService.getAvailableSnapshotRegistry(snapshot.organizationId)
       localImageName = snapshot.internalName
     } else {
       registry = await this.dockerRegistryService.findRegistryBySnapshotImageName(
@@ -802,7 +802,7 @@ export class SnapshotManager implements TrackableJobExecutions, OnApplicationShu
   }
 
   async pushToSnapshotRegistry(snapshot: Snapshot): Promise<string> {
-    const registry = await this.dockerRegistryService.getDefaultSnapshotRegistry(snapshot.organizationId)
+    const registry = await this.dockerRegistryService.getAvailableSnapshotRegistry(snapshot.organizationId)
     if (!registry) {
       throw new Error('No snapshot registry configured')
     }

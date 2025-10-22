@@ -6891,42 +6891,6 @@ paths:
       summary: Update registry
       tags:
         - docker-registry
-  /docker-registry/{id}/set-default:
-    post:
-      operationId: setDefaultRegistry
-      parameters:
-        - description: Use with JWT to specify the organization ID
-          explode: false
-          in: header
-          name: X-Daytona-Organization-ID
-          required: false
-          schema:
-            type: string
-          style: simple
-        - description: ID of the docker registry
-          explode: false
-          in: path
-          name: id
-          required: true
-          schema:
-            type: string
-          style: simple
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DockerRegistry'
-          description: The docker registry has been set as default.
-      security:
-        - bearer: []
-        - oauth2:
-            - openid
-            - profile
-            - email
-      summary: Set default registry
-      tags:
-        - docker-registry
   /webhooks/organizations/{organizationId}/app-portal-access:
     post:
       operationId: WebhookController_getAppPortalAccess
@@ -11391,9 +11355,9 @@ components:
       example:
         registryType: source
         password: password
-        isDefault: true
         name: name
         project: project
+        isActive: true
         url: url
         username: username
       properties:
@@ -11421,8 +11385,8 @@ components:
             - backup
             - transient
           type: string
-        isDefault:
-          description: Set as default registry
+        isActive:
+          description: Whether the registry is active is available for use
           type: boolean
       required:
         - name

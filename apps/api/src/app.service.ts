@@ -90,7 +90,7 @@ Admin user created with API key: ${value}
   }
 
   private async initializeTransientRegistry(): Promise<void> {
-    const existingRegistry = await this.dockerRegistryService.getDefaultTransientRegistry()
+    const existingRegistry = await this.dockerRegistryService.getAvailableTransientRegistry()
     if (existingRegistry) {
       return
     }
@@ -114,14 +114,14 @@ Admin user created with API key: ${value}
       password: registryPassword,
       project: registryProjectId,
       registryType: RegistryType.TRANSIENT,
-      isDefault: true,
+      isActive: true,
     })
 
     this.logger.log('Default transient registry initialized successfully')
   }
 
   private async initializeSnapshotRegistry(): Promise<void> {
-    const existingRegistry = await this.dockerRegistryService.getDefaultSnapshotRegistry()
+    const existingRegistry = await this.dockerRegistryService.getAvailableSnapshotRegistry()
     if (existingRegistry) {
       return
     }
@@ -145,7 +145,7 @@ Admin user created with API key: ${value}
       password: registryPassword,
       project: registryProjectId,
       registryType: RegistryType.SNAPSHOT,
-      isDefault: true,
+      isActive: true,
     })
 
     this.logger.log('Default snapshot registry initialized successfully')

@@ -32,7 +32,6 @@ import { RequiredOrganizationResourcePermissions } from '../../organization/deco
 import { OrganizationResourcePermission } from '../../organization/enums/organization-resource-permission.enum'
 import { OrganizationResourceActionGuard } from '../../organization/guards/organization-resource-action.guard'
 import { SystemActionGuard } from '../../auth/system-action.guard'
-import { RequiredSystemRole } from '../../common/decorators/required-role.decorator'
 import { SystemRole } from '../../user/enums/system-role.enum'
 import { Audit, MASKED_AUDIT_VALUE, TypedRequest } from '../../audit/decorators/audit.decorator'
 import { AuditAction } from '../../audit/enums/audit-action.enum'
@@ -71,7 +70,7 @@ export class DockerRegistryController {
         url: req.body?.url,
         project: req.body?.project,
         registryType: req.body?.registryType,
-        isDefault: req.body?.isDefault,
+        isActive: req.body?.isActive,
       }),
     },
   })
@@ -83,11 +82,6 @@ export class DockerRegistryController {
       throw new ForbiddenException(
         `Insufficient permissions for creating ${createDockerRegistryDto.registryType} registries`,
       )
-    }
-
-    // TODO: move to admin controller
-    if (createDockerRegistryDto.isDefault && authContext.role !== SystemRole.ADMIN) {
-      throw new ForbiddenException('Insufficient permissions for setting a default registry')
     }
 
     const dockerRegistry = await this.dockerRegistryService.create(createDockerRegistryDto, authContext.organizationId)
@@ -208,32 +202,5 @@ export class DockerRegistryController {
   })
   async remove(@Param('id') registryId: string): Promise<void> {
     return this.dockerRegistryService.remove(registryId)
-  }
-
-  @Post(':id/set-default')
-  @ApiOperation({
-    summary: 'Set default registry',
-    operationId: 'setDefaultRegistry',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'ID of the docker registry',
-    type: 'string',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'The docker registry has been set as default.',
-    type: DockerRegistryDto,
-  })
-  @RequiredSystemRole(SystemRole.ADMIN)
-  @UseGuards(DockerRegistryAccessGuard)
-  @Audit({
-    action: AuditAction.SET_DEFAULT,
-    targetType: AuditTarget.DOCKER_REGISTRY,
-    targetIdFromRequest: (req) => req.params.id,
-  })
-  async setDefault(@Param('id') registryId: string): Promise<DockerRegistryDto> {
-    const dockerRegistry = await this.dockerRegistryService.setDefault(registryId)
-    return DockerRegistryDto.fromDockerRegistry(dockerRegistry)
   }
 }

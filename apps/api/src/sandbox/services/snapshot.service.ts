@@ -96,7 +96,7 @@ export class SnapshotService {
         }
       }
 
-      const registry = await this.dockerRegistryService.getDefaultSnapshotRegistry(organization)
+      const registry = await this.dockerRegistryService.getAvailableSnapshotRegistry(organization)
       if (!registry) {
         throw new BadRequestException('No snapshot registry is configured for this organization')
       }
